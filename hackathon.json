@@ -1,11 +1,11 @@
 {
-  "teamCode": "TEAM-000",
-  "teamName": "Nombre de la cuadrilla",
+  "teamCode": "TEAM-010",
+  "teamName": "Tequeños",
   "deployUrl": "https://",
   "storageProvider": "SUPABASE | CLOUDINARY",
   "integrantes": [
-    { "nombre": "Nombre Apellido", "codigo": "CODIGO UTEC" },
-    { "nombre": "Nombre Apellido", "codigo": "CODIGO UTEC" },
-    { "nombre": "Nombre Apellido", "codigo": "CODIGO UTEC" }
+    { "nombre": "Camila Gomez", "codigo": "202510093" },
+    { "nombre": "Nicole Yucra", "codigo": "202510210" },
+    { "nombre": "Andrea Vidal", "codigo": "202410193" }
   ]
 }

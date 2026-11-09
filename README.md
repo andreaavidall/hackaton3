@@ -6,6 +6,37 @@
 
 > *"El trabajo es misterioso e importante."*
 
+## Integrantes
+
+| Nombre | Código UTEC |
+|:-------|:------------|
+| Camila Gomez | 202510093 |
+| Nicole Yucra | 202510210 |
+| Andrea Vidal | 202410193 |
+
+- **Equipo:** Tequeños
+- **TEAM_CODE:** `TEAM-010`
+- **URL de producción:** _(pendiente)_
+- **Storage:** _(pendiente: Supabase o Cloudinary)_
+
+### Cómo ejecutar el proyecto
+
+```bash
+npm install
+npm run dev
+```
+
+Variables de entorno necesarias (ver `.env.example`):
+
+```txt
+VITE_API_BASE_URL=https://lumon-api.vercel.app/api/v1
+VITE_WS_BASE_URL=wss://lumon-api.vercel.app/api/v1
+```
+
+### Despliegue y storage
+
+_(pendiente: cómo verificamos el dominio y cómo configuramos el storage)_
+
 <!--
 Control de cambios del enunciado (uso interno del equipo docente)
 v2.1 · 19/10/2026
