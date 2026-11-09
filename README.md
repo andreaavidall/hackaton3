@@ -16,8 +16,8 @@
 
 - **Equipo:** Tequeños
 - **TEAM_CODE:** `TEAM-010`
-- **URL de producción:** _(pendiente)_
-- **Storage:** _(pendiente: Supabase o Cloudinary)_
+- **URL de producción:** https://hackaton3-xi.vercel.app
+- **Storage:** Supabase Storage (bucket `lumon-media`)
 
 ### Cómo ejecutar el proyecto
 
@@ -33,9 +33,27 @@ VITE_API_BASE_URL=https://lumon-api.vercel.app/api/v1
 VITE_WS_BASE_URL=wss://lumon-api.vercel.app/api/v1
 ```
 
-### Despliegue y storage
+### Despliegue
 
-_(pendiente: cómo verificamos el dominio y cómo configuramos el storage)_
+Desplegado en Vercel desde la rama `main`: cada push a `main` genera un despliegue de
+producción. `X-Lumon-Build` se inyecta en tiempo de build con el SHA corto del commit
+(`vite.config.ts`), y vale `dev` en local.
+
+`vercel.json` define el rewrite de SPA (para que cualquier ruta directa funcione, dejando
+`/.well-known/` servido como archivo estático) y las cabeceras `Content-Security-Policy`,
+`X-Content-Type-Options` y `Referrer-Policy`.
+
+Verificación del dominio ante la API de Lumon:
+
+1. `POST /integrations/deploy/challenge` con el origen de producción.
+2. El token devuelto se publica en `public/.well-known/lumon-verification.txt`.
+3. `POST /integrations/deploy/verify`.
+
+### Storage
+
+Supabase Storage, bucket `lumon-media`, público para lectura, con política RLS que permite al
+rol `anon` solo `INSERT` dentro de la carpeta `TEAM-010/`. En el frontend se usa únicamente la
+clave publicable; la `service_role` no está en el repositorio ni en el bundle.
 
 <!--
 Control de cambios del enunciado (uso interno del equipo docente)

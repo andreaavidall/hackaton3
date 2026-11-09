@@ -1,7 +1,7 @@
 {
   "teamCode": "TEAM-010",
   "teamName": "Tequeños",
-  "deployUrl": "https://",
+  "deployUrl": "https://hackaton3-xi.vercel.app",
   "storageProvider": "SUPABASE",
   "integrantes": [
     { "nombre": "Camila Gomez", "codigo": "202510093" },
