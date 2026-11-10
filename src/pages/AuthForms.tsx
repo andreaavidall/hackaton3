@@ -25,7 +25,8 @@ function toFieldErrors(err: unknown): FieldErrors {
       if ((fields as readonly string[]).includes(f)) out[f as (typeof fields)[number]] = item.message ?? err.message;
     }
   } else if (d && typeof d === "object") {
-    const rec = d as Record<string, unknown>;
+    const outer = d as Record<string, unknown>;
+    const rec = (outer.fields && typeof outer.fields === "object" ? outer.fields : outer) as Record<string, unknown>;
     for (const f of fields) {
       const v = rec[f];
       if (typeof v === "string") out[f] = v;
