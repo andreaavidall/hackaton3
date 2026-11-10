@@ -68,23 +68,38 @@ export default function Files() {
   useEffect(() => setSearch(params.q), [params.q]);
 
   const queryKey = `${params.page}|${params.pageSize}|${params.status}|${params.sort}|${params.q}`;
+  const [rejected, setRejected] = useState<string[]>([]);
   useEffect(() => {
     const id = ++reqId.current;
     const controller = new AbortController();
-    const qs = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize), sort: params.sort });
+    const qs = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
+    if (sp.get("sort")) qs.set("sort", params.sort);
     if (params.status) qs.set("status", params.status);
     if (params.q) qs.set("q", params.q);
     setLoading(true);
     setError(null);
-    authFetch(`/files?${qs.toString()}`, { signal: controller.signal })
-      .then(async (res) => {
-        const json = (await res.json()) as Record<string, unknown>;
-        if (!res.ok) throw new Error(typeof json.message === "string" ? json.message : `HTTP ${res.status}`);
-        const items = (Array.isArray(json) ? json : (json.items ?? json.data ?? json.files ?? [])) as FileItem[];
-        const total = typeof json.total === "number" ? json.total : typeof json.totalItems === "number" ? json.totalItems : null;
-        // Una respuesta vieja nunca pisa a una nueva.
-        if (id === reqId.current) setData({ items, total });
-      })
+    const run = async (attempt: number): Promise<void> => {
+      const res = await authFetch(`/files?${qs.toString()}`, { signal: controller.signal });
+      const json = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        // Si el servidor rechaza un parametro, lo quitamos y reintentamos (mostrando cual fue).
+        const fields = (json.details as { fields?: Record<string, string> } | null)?.fields;
+        const bad = fields ? Object.keys(fields).filter((k) => qs.has(k)) : [];
+        if (res.status === 400 && bad.length > 0 && attempt < 3) {
+          bad.forEach((k) => qs.delete(k));
+          if (id === reqId.current) setRejected((r) => Array.from(new Set([...r, ...bad.map((k) => `${k}: ${fields?.[k] ?? ""}`)])));
+          return run(attempt + 1);
+        }
+        const detail = fields ? ` (${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("; ")})` : "";
+        throw new Error(`${typeof json.message === "string" ? json.message : `HTTP ${res.status}`}${detail}`);
+      }
+      const items = (Array.isArray(json) ? json : (json.items ?? json.data ?? json.files ?? json.results ?? [])) as FileItem[];
+      const meta = (json.meta ?? json.pagination ?? json) as Record<string, unknown>;
+      const total = typeof meta.total === "number" ? meta.total : typeof meta.totalItems === "number" ? meta.totalItems : null;
+      // Una respuesta vieja nunca pisa a una nueva.
+      if (id === reqId.current) setData({ items, total });
+    };
+    run(0)
       .catch((e: unknown) => {
         if (controller.signal.aborted || id !== reqId.current) return;
         setError(e instanceof Error ? e.message : "Error al cargar");
@@ -132,6 +147,7 @@ export default function Files() {
         </div>
 
         {error && <p role="alert" className="mt-4 text-red-400">{error}</p>}
+        {rejected.length > 0 && <p className="mt-2 text-xs text-amber-400">Parámetros ignorados por la API: {rejected.join(" · ")}</p>}
         <p aria-live="polite" className="mt-4 h-5 text-sm text-neutral-500">{loading ? "Cargando…" : ""}</p>
 
         <table className="mt-2 w-full text-left text-sm">
