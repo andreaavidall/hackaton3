@@ -5,6 +5,7 @@ import { authFetch } from "../lib/auth";
 interface FileItem {
   id: number | string;
   name?: string;
+  title?: string;
   status?: string;
   rows?: number;
   cols?: number;
@@ -30,6 +31,39 @@ function readParams(sp: URLSearchParams) {
   const sort = SORTS.includes(sortRaw) ? sortRaw : "name";
   const q = (sp.get("q") ?? "").slice(0, 100);
   return { page, pageSize, status, sort, q };
+}
+
+/** Busca la lista de archivos en la respuesta, se llame como se llame el campo. */
+function findList(json: unknown): unknown[] {
+  if (Array.isArray(json)) return json;
+  if (!json || typeof json !== "object") return [];
+  const obj = json as Record<string, unknown>;
+  for (const k of ["items", "data", "files", "results", "content", "rows", "records"]) {
+    const v = obj[k];
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === "object") {
+      const inner = findList(v);
+      if (inner.length) return inner;
+    }
+  }
+  for (const v of Object.values(obj)) if (Array.isArray(v)) return v;
+  return [];
+}
+
+function findTotal(json: unknown): number | null {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return null;
+  const obj = json as Record<string, unknown>;
+  for (const k of ["total", "totalItems", "totalCount", "count", "totalElements"]) {
+    if (typeof obj[k] === "number") return obj[k] as number;
+  }
+  for (const k of ["meta", "pagination", "page", "pageInfo"]) {
+    const v = obj[k];
+    if (v && typeof v === "object") {
+      const t = findTotal(v);
+      if (t !== null) return t;
+    }
+  }
+  return null;
 }
 
 function pct(p: FileItem["progress"]): string {
@@ -93,9 +127,8 @@ export default function Files() {
         const detail = fields ? ` (${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join("; ")})` : "";
         throw new Error(`${typeof json.message === "string" ? json.message : `HTTP ${res.status}`}${detail}`);
       }
-      const items = (Array.isArray(json) ? json : (json.items ?? json.data ?? json.files ?? json.results ?? [])) as FileItem[];
-      const meta = (json.meta ?? json.pagination ?? json) as Record<string, unknown>;
-      const total = typeof meta.total === "number" ? meta.total : typeof meta.totalItems === "number" ? meta.totalItems : null;
+      const items = findList(json) as FileItem[];
+      const total = findTotal(json);
       // Una respuesta vieja nunca pisa a una nueva.
       if (id === reqId.current) setData({ items, total });
     };
@@ -158,7 +191,7 @@ export default function Files() {
             {data?.items.map((f) => (
               <tr key={f.id}>
                 <td className="py-2">
-                  <Link to={`/files/${f.id}/refine`} className="text-cyan-400 hover:underline">{f.name ?? `Archivo ${f.id}`}</Link>
+                  <Link to={`/files/${f.id}/refine`} className="text-cyan-400 hover:underline">{f.name ?? f.title ?? `Archivo ${f.id}`}</Link>
                 </td>
                 <td>{f.status ?? "—"}</td>
                 <td>{f.rows && f.cols ? `${f.rows}×${f.cols}` : "—"}</td>
