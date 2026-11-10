@@ -9,15 +9,18 @@ import { AuthProvider } from "./auth/AuthContext";
 import { GuestOnly, RequireAuth, RequirePermission } from "./auth/guards";
 import HealthGate from "./components/HealthGate";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { EventsProvider } from "./realtime/EventsProvider";
 
 const Files = lazy(() => import("./pages/Files"));
 const Refine = lazy(() => import("./pages/Refine"));
+const RefinerEdit = lazy(() => import("./pages/RefinerEdit"));
 
 export default function App() {
   const location = useLocation();
   return (
     <HealthGate>
       <AuthProvider>
+        <EventsProvider>
         <ErrorBoundary resetKey={location.pathname}>
         <Suspense fallback={<p className="p-6 text-neutral-400">Cargando…</p>}>
         <Routes>
@@ -37,10 +40,12 @@ export default function App() {
           />
           <Route path="/files" element={<RequireAuth><RequirePermission permission="files:read"><Files /></RequirePermission></RequireAuth>} />
           <Route path="/files/:id/refine" element={<RequireAuth><RequirePermission permission="files:read"><Refine /></RequirePermission></RequireAuth>} />
+          <Route path="/refiners/:id/edit" element={<RequireAuth><RequirePermission permission="refiners:write"><RefinerEdit /></RequirePermission></RequireAuth>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
         </ErrorBoundary>
+        </EventsProvider>
       </AuthProvider>
     </HealthGate>
   );

@@ -82,6 +82,12 @@ export class TileStore {
     return this.tiles.get(TileStore.key(tr, tc));
   }
 
+  /** Olvida todos los bloques (p. ej. tras stream.reset) para volver a pedirlos. */
+  clear(): void {
+    this.tiles.clear();
+    this.emit();
+  }
+
   invalidate(keys: Iterable<string>): void {
     for (const k of keys) this.tiles.delete(k);
     this.emit();
