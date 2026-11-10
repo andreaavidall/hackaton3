@@ -14,6 +14,10 @@ import { EventsProvider } from "./realtime/EventsProvider";
 const Files = lazy(() => import("./pages/Files"));
 const Refine = lazy(() => import("./pages/Refine"));
 const RefinerEdit = lazy(() => import("./pages/RefinerEdit"));
+const Refiners = lazy(() => import("./pages/Refiners"));
+const BadgeEditor = lazy(() => import("./pages/BadgeEditor"));
+const IncidentsList = lazy(() => import("./pages/Incidents").then((m) => ({ default: m.IncidentsList })));
+const IncidentNew = lazy(() => import("./pages/Incidents").then((m) => ({ default: m.IncidentNew })));
 
 export default function App() {
   const location = useLocation();
@@ -41,6 +45,10 @@ export default function App() {
           <Route path="/files" element={<RequireAuth><RequirePermission permission="files:read"><Files /></RequirePermission></RequireAuth>} />
           <Route path="/files/:id/refine" element={<RequireAuth><RequirePermission permission="files:read"><Refine /></RequirePermission></RequireAuth>} />
           <Route path="/refiners/:id/edit" element={<RequireAuth><RequirePermission permission="refiners:write"><RefinerEdit /></RequirePermission></RequireAuth>} />
+          <Route path="/refiners" element={<RequireAuth><RequirePermission permission="refiners:read"><Refiners /></RequirePermission></RequireAuth>} />
+          <Route path="/refiners/:id/badge" element={<RequireAuth><RequirePermission permission="media:upload"><BadgeEditor /></RequirePermission></RequireAuth>} />
+          <Route path="/incidents" element={<RequireAuth><RequirePermission permission="incidents:read"><IncidentsList /></RequirePermission></RequireAuth>} />
+          <Route path="/incidents/new" element={<RequireAuth><RequirePermission permission="incidents:create"><IncidentNew /></RequirePermission></RequireAuth>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
