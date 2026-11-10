@@ -1,7 +1,7 @@
 {
   "teamCode": "TEAM-060",
   "teamName": "Tequeños",
-  "deployUrl": "https://",
+  "deployUrl": "https://hackaton3-xi.vercel.app",
   "storageProvider": "SUPABASE",
   "integrantes": [
     { "nombre": "Nicole Yucra", "codigo": "202510210" },
