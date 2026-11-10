@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, authFetch, authJson } from "../lib/auth";
 import { TileStore } from "../lib/tiles";
+import { useAuth } from "../auth/AuthContext";
+import { useLumonEvent } from "../realtime/EventsProvider";
+import { CursorLayer, FloorPanel, useFloor } from "../realtime/FloorUI";
+import { ClaimDeniedError, parseCells } from "../realtime/floor";
 
 type Bin = "WO" | "FC" | "DR" | "MA";
 const BINS: Bin[] = ["WO", "FC", "DR", "MA"];
@@ -61,6 +65,22 @@ export default function Refine() {
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const intent = useRef<{ key: string; sig: string } | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const { me } = useAuth();
+  const myId = useMemo(() => {
+    const o = (me ?? {}) as Record<string, unknown>;
+    const u = o["user"] as Record<string, unknown> | undefined;
+    const v = u?.["id"] ?? o["id"] ?? o["userId"];
+    return typeof v === "number" || typeof v === "string" ? String(v) : null;
+  }, [me]);
+  // CP5: piso compartido (WebSocket) mientras la grilla esta abierta.
+  const floor = useFloor(id, myId);
+  const [claimState, setClaimState] = useState<"none" | "pending" | "granted">("none");
+  const othersClaimed = floor ? floor.othersClaimedCells() : new Map<string, string>();
+
+  function releaseClaim() {
+    floor?.release();
+    setClaimState("none");
+  }
 
   useEffect(() => store.subscribe(() => force((n) => n + 1)), [store]);
 
@@ -79,6 +99,37 @@ export default function Refine() {
       alive = false;
     };
   }, [id]);
+
+  // CP5: eventos en tiempo real sobre este archivo.
+  useLumonEvent((ev) => {
+    const evFile = ev.data["fileId"] ?? (ev.data["file"] as Record<string, unknown> | undefined)?.["id"];
+    if (ev.type === "stream.reset") {
+      store.clear();
+      authJson<FileDetail>(`/files/${id}`)
+        .then((f) => {
+          setFile(f);
+          setProgress(f.progress ?? {});
+        })
+        .catch(() => undefined);
+      return;
+    }
+    if (evFile === undefined || String(evFile) !== id) return;
+    if (ev.type === "refinement.created") {
+      const bin = ev.data["bin"];
+      const letter = typeof bin === "string" ? (BIN_LETTER[bin as Bin] ?? bin.charAt(0).toUpperCase()) : null;
+      if (letter) {
+        for (const cell of parseCells(ev.data["cells"])) {
+          const tile = store.get(Math.floor(cell.r / ts), Math.floor(cell.c / ts));
+          if (tile) tile.bins[(cell.r - tile.originRow) * tile.cols + (cell.c - tile.originCol)] = letter;
+        }
+      }
+      const p = (ev.data["progress"] ?? (ev.data["file"] as Record<string, unknown> | undefined)?.["progress"]) as Progress | undefined;
+      if (p && typeof p === "object") setProgress(p);
+      force((n) => n + 1);
+    } else if (ev.type === "file.completed") {
+      setProgress((p) => ({ ...p, overall: 100 }));
+    }
+  });
 
   // Posicion inicial desde ?r=&c=.
   useEffect(() => {
@@ -158,6 +209,13 @@ export default function Refine() {
   // Seleccionar el grupo completo (BFS), pidiendo los bloques que falten.
   async function selectGroup(start: Cell) {
     if (!rules || !file || selecting) return;
+    releaseClaim();
+    const holderAtStart = othersClaimed.get(`${start.r},${start.c}`);
+    if (holderAtStart) {
+      setGroup(null);
+      setMessage({ kind: "error", text: `Ese grupo lo tiene reservado ${holderAtStart}. Elige otro grupo o espera a que lo libere.` });
+      return;
+    }
     const first = cellAt(start.r, start.c);
     if (first && !isScary(first)) {
       setGroup(null);
@@ -203,8 +261,31 @@ export default function Refine() {
       const noise = cells.length < rules.minGroupSize || cells.length > rules.maxGroupSize;
       const idx = (rules.binning.strategy === "MAX_DIGIT_MOD" ? max : sum) % 4;
       const bin = noise ? null : (rules.binning.order[idx] ?? null);
+      const taken = cells.map((cl) => othersClaimed.get(`${cl.r},${cl.c}`)).find(Boolean);
+      if (taken) {
+        setGroup(null);
+        setMessage({ kind: "error", text: `Ese grupo lo tiene reservado ${taken}. Elige otro grupo o espera a que lo libere.` });
+        return;
+      }
       setGroup({ cells, noise, bin, tiles });
       intent.current = null;
+      // Antes de llevarlo a una caja, se reserva en el piso compartido.
+      if (!noise && floor?.connected) {
+        setClaimState("pending");
+        floor
+          .claim(start.r, start.c)
+          .then(() => setClaimState("granted"))
+          .catch((e: unknown) => {
+            setClaimState("none");
+            if (e instanceof ClaimDeniedError) {
+              setGroup(null);
+              setMessage({ kind: "error", text: e.message });
+            } else {
+              // Sin respuesta del piso: se puede refinar igual (el backend responde 409 si otro lo tiene).
+              setMessage({ kind: "error", text: `${e instanceof Error ? e.message : "No se pudo reservar"} Puedes refinar igual.` });
+            }
+          });
+      }
     } catch (e) {
       setMessage({ kind: "error", text: e instanceof Error ? e.message : "No se pudo leer el grupo" });
     } finally {
@@ -214,7 +295,7 @@ export default function Refine() {
 
   // Refinar: una Idempotency-Key por intencion; los reintentos reusan la misma key.
   async function refine(bin: Bin) {
-    if (!group || group.noise || busy) return;
+    if (!group || group.noise || busy || claimState === "pending") return;
     const body = JSON.stringify({ bin, cells: group.cells });
     if (!intent.current || intent.current.sig !== body) intent.current = { key: uuid(), sig: body };
     const key = intent.current.key;
@@ -252,6 +333,7 @@ export default function Refine() {
           const p = (json.progress ?? (json.file as Record<string, unknown> | undefined)?.progress) as Progress | undefined;
           if (p) setProgress(p);
           setGroup(null);
+          releaseClaim();
           intent.current = null;
           setMessage({ kind: "ok", text: `Grupo de ${group.cells.length} celdas llevado a ${bin}.` });
           force((n) => n + 1);
@@ -262,6 +344,7 @@ export default function Refine() {
         if (res.status === 409) {
           store.invalidate(group.tiles);
           setGroup(null);
+          releaseClaim();
           intent.current = null;
           const holder = details?.holder as { displayName?: string } | undefined;
           setMessage({
@@ -331,6 +414,19 @@ export default function Refine() {
     }
   }
 
+  // CP5: el cursor propio es la celda con foco (throttle de 10/s dentro de FloorClient).
+  useEffect(() => {
+    floor?.moveCursor(focus.r, focus.c);
+  }, [floor, focus.r, focus.c]);
+
+  function goTo(r: number, c: number) {
+    const el = viewport.current;
+    if (!el) return;
+    el.scrollTop = Math.max(0, r * CELL - el.clientHeight / 2);
+    el.scrollLeft = Math.max(0, c * CELL - el.clientWidth / 2);
+    setFocus({ r, c });
+  }
+
   // Foco real del DOM en la celda activa (siempre esta renderizada).
   useEffect(() => {
     const el = document.getElementById(`cell-${focus.r}-${focus.c}`);
@@ -389,6 +485,7 @@ export default function Refine() {
       const scary = isScary(cell);
       const sel = selected.has(`${r},${c}`);
       const isFocus = focus.r === r && focus.c === c;
+      const heldBy = othersClaimed.get(`${r},${c}`);
       const amp = cell && scary ? Math.max(0.5, (cell.tremor / 100) * 2.5) : 0;
       cells.push(
         <div
@@ -397,6 +494,8 @@ export default function Refine() {
           role="gridcell"
           aria-colindex={c + 1}
           aria-selected={sel}
+          title={heldBy ? `Reservado por ${heldBy}` : undefined}
+          aria-label={heldBy && cell ? `${cell.digit}, reservado por ${heldBy}` : undefined}
           tabIndex={isFocus ? 0 : -1}
           onClick={() => {
             setFocus({ r, c });
@@ -408,7 +507,7 @@ export default function Refine() {
             !cell ? "bg-neutral-900 text-transparent" : cell.bin !== "." ? `${LETTER_COLOR[cell.bin] ?? ""} text-neutral-400` : "text-neutral-300"
           } ${scary ? "tremble font-bold text-amber-300 underline decoration-dotted" : ""} ${sel ? "bg-cyan-700 text-white cursor-grab" : ""} ${
             isFocus ? "outline outline-2 outline-cyan-400 z-10" : ""
-          }`}
+          } ${heldBy ? "bg-rose-950 text-rose-300 line-through" : ""}`}
         >
           {cell ? cell.digit : "·"}
         </div>,
@@ -443,6 +542,7 @@ export default function Refine() {
         >
           <div style={{ height: file.rows * CELL, width: file.cols * CELL }} className="relative">
             {rowEls}
+            <CursorLayer client={floor} bounds={{ r0, r1, c0, c1 }} cell={CELL} />
           </div>
         </div>
 
@@ -458,6 +558,20 @@ export default function Refine() {
               </p>
             )}
             {group && !group.noise && <p className="mt-1 text-xs text-neutral-500">Arrastra el grupo a una caja, o usa las teclas 1 a 4.</p>}
+            {group && !group.noise && claimState === "pending" && <p className="mt-1 text-xs text-amber-300">Reservando el grupo…</p>}
+            {group && !group.noise && claimState === "granted" && <p className="mt-1 text-xs text-emerald-400">Grupo reservado para ti.</p>}
+            {group && (
+              <button
+                type="button"
+                onClick={() => {
+                  setGroup(null);
+                  releaseClaim();
+                }}
+                className="mt-2 text-xs text-neutral-400 underline hover:text-neutral-200"
+              >
+                Cancelar selección
+              </button>
+            )}
           </section>
 
           <section className="space-y-2">
@@ -466,7 +580,7 @@ export default function Refine() {
                 key={b}
                 type="button"
                 data-bin={b}
-                disabled={!group || group.noise || busy}
+                disabled={!group || group.noise || busy || claimState === "pending"}
                 onClick={() => void refine(b)}
                 className={`block w-full rounded border px-3 py-2 text-left disabled:opacity-60 ${drag ? "border-cyan-400" : "border-neutral-700"}`}
               >
@@ -478,6 +592,8 @@ export default function Refine() {
             ))}
             {busy && <p className="text-neutral-400">Refinando…</p>}
           </section>
+
+          <FloorPanel client={floor} bounds={{ r0, r1, c0, c1 }} onGoTo={goTo} />
 
           {message && (
             <p role={message.kind === "error" ? "alert" : "status"} className={message.kind === "error" ? "text-red-400" : "text-emerald-400"}>
