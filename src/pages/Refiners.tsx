@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { authJson } from "../lib/auth";
 import { errorText } from "../lib/media";
+import { useLumonEvent } from "../realtime/EventsProvider";
+import { acceptVersion } from "../realtime/versions";
 
 export interface Refiner {
   id: number | string;
@@ -45,6 +47,7 @@ export default function Refiners() {
   const [items, setItems] = useState<Refiner[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const req = useRef(0);
   const pageSize = 20;
 
@@ -78,12 +81,26 @@ export default function Refiners() {
     authJson<unknown>(`/refiners?${qs.toString()}`)
       .then((d) => {
         if (id !== req.current) return;
-        setItems(listOf<Refiner>(d));
+        const list = listOf<Refiner>(d);
+        list.forEach((r) => acceptVersion(String(r.id), r.version));
+        setItems(list);
         const t = (d as Record<string, unknown>).total;
         setTotal(typeof t === "number" ? t : null);
       })
       .catch((e: unknown) => id === req.current && setError(errorText(e)));
-  }, [page, department, q]);
+  }, [page, department, q, reload]);
+
+  // CP5: el directorio refleja los eventos sin recargar; una version vieja nunca pisa a una nueva.
+  useLumonEvent((ev) => {
+    if (ev.type === "stream.reset") {
+      setReload((n) => n + 1);
+      return;
+    }
+    if (ev.type !== "refiner.updated") return;
+    const evId = ev.data["id"] ?? ev.data["refinerId"];
+    if (evId === undefined || !acceptVersion(String(evId), ev.data["version"])) return;
+    setItems((list) => list?.map((r) => (String(r.id) === String(evId) ? ({ ...r, ...ev.data, id: r.id } as Refiner) : r)) ?? list);
+  });
 
   const pages = total !== null ? Math.max(1, Math.ceil(total / pageSize)) : null;
 
@@ -124,6 +141,7 @@ export default function Refiners() {
                   <p className="font-medium break-words">{refinerName(r)}</p>
                   <p className="text-sm text-neutral-400 break-words">{r.title ?? ""} · {deptName(r)}</p>
                   <Link to={`/refiners/${r.id}/badge`} className="mt-1 inline-block text-sm text-cyan-400 hover:underline">Editar fotocheck</Link>
+                  <Link to={`/refiners/${r.id}/edit`} className="ml-3 mt-1 inline-block text-sm text-cyan-400 hover:underline">Editar expediente</Link>
                 </div>
               </li>
             );
