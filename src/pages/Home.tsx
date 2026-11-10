@@ -46,6 +46,12 @@ export default function Home() {
           <Link to="/files" className="rounded border border-cyan-700 px-4 py-2 text-cyan-300 hover:border-cyan-400">
             Archivos de datos
           </Link>
+          <Link to="/refiners" className="rounded border border-neutral-700 px-4 py-2 hover:border-cyan-400 hover:text-cyan-400">
+            Expedientes
+          </Link>
+          <Link to="/incidents" className="rounded border border-neutral-700 px-4 py-2 hover:border-cyan-400 hover:text-cyan-400">
+            Incidencias
+          </Link>
           <Link to="/estado" className="rounded border border-neutral-700 px-4 py-2 hover:border-cyan-400 hover:text-cyan-400">
             Estado del piso
           </Link>
