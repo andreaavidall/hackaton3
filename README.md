@@ -15,7 +15,7 @@
 | Andrea Vidal | 202410193 |
 
 - **Equipo:** Tequeños
-- **TEAM_CODE:** `TEAM-010`
+- **TEAM_CODE:** `TEAM-060`
 - **URL de producción:** https://hackaton3-xi.vercel.app
 - **Storage:** Supabase Storage (bucket `lumon-media`)
 
@@ -52,7 +52,7 @@ Verificación del dominio ante la API de Lumon:
 ### Storage
 
 Supabase Storage, bucket `lumon-media`, público para lectura, con política RLS que permite al
-rol `anon` solo `INSERT` dentro de la carpeta `TEAM-010/`. En el frontend se usa únicamente la
+rol `anon` solo `INSERT` dentro de la carpeta `TEAM-060/`. En el frontend se usa únicamente la
 clave publicable; la `service_role` no está en el repositorio ni en el bundle.
 
 <!--
