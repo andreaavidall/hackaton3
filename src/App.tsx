@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
 import Estado from "./pages/Estado";
 import Equipo from "./pages/Equipo";
@@ -7,11 +7,14 @@ import { LoginPage, RegisterPage } from "./pages/AuthForms";
 import { AuthProvider } from "./auth/AuthContext";
 import { GuestOnly, RequireAuth, RequirePermission } from "./auth/guards";
 import HealthGate from "./components/HealthGate";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 export default function App() {
+  const location = useLocation();
   return (
     <HealthGate>
       <AuthProvider>
+        <ErrorBoundary resetKey={location.pathname}>
         <Routes>
           <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
           <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
@@ -29,6 +32,7 @@ export default function App() {
           />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </ErrorBoundary>
       </AuthProvider>
     </HealthGate>
   );
